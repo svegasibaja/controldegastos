@@ -14,8 +14,15 @@ from google.oauth2.service_account import Credentials
 from datetime import datetime
 import os
 import json
+import sys
 
 app = Flask(__name__)
+
+
+def log(msg):
+    """Imprime inmediatamente en los logs de Render (sin buffer)."""
+    print(msg, flush=True)
+    sys.stdout.flush()
 
 # ---------------------------------------------------------------------------
 # CONFIGURACIÓN
@@ -30,24 +37,30 @@ ENCABEZADOS = ["Fecha", "Tipo", "Medio", "Categoría", "Monto", "Descripción"]
 
 def get_sheet():
     """Abre (o crea) la hoja 'Registros' dentro del spreadsheet."""
+    log("[1/5] Leyendo credenciales...")
     creds_json = os.environ.get(CREDS_ENV_VAR)
     if creds_json:
-        # Producción: la clave viene como texto en una variable de entorno
+        log("[2/5] Usando GOOGLE_CREDENTIALS_JSON (producción)")
         info = json.loads(creds_json)
         creds = Credentials.from_service_account_info(info, scopes=SCOPES)
     else:
-        # Local: se lee del archivo credentials.json
+        log("[2/5] Usando archivo credentials.json (local)")
         creds = Credentials.from_service_account_file(CREDS_FILE, scopes=SCOPES)
 
+    log("[3/5] Autorizando con gspread...")
     client = gspread.authorize(creds)
+
+    log(f"[4/5] Abriendo sheet {SHEET_ID}...")
     sh = client.open_by_key(SHEET_ID)
 
+    log("[5/5] Buscando/creando pestaña Registros...")
     try:
         worksheet = sh.worksheet(SHEET_NAME)
     except gspread.WorksheetNotFound:
         worksheet = sh.add_worksheet(title=SHEET_NAME, rows=2000, cols=len(ENCABEZADOS))
         worksheet.append_row(ENCABEZADOS)
 
+    log("OK: sheet listo")
     return worksheet
 
 
@@ -75,6 +88,22 @@ def registro():
         }), 200
     except Exception as e:
         return jsonify({"status": "error", "mensaje": str(e)}), 500
+
+
+@app.route("/diag", methods=["GET"])
+def diag():
+    """Ruta de diagnóstico: prueba la conexión con Google Sheets sin escribir nada,
+    y muestra en pantalla en qué paso falla (si falla)."""
+    try:
+        log("=== DIAG: iniciando prueba ===")
+        worksheet = get_sheet()
+        log("=== DIAG: éxito ===")
+        return jsonify({"status": "ok", "mensaje": "Conexión con Google Sheets exitosa ✅"}), 200
+    except Exception as e:
+        import traceback
+        tb = traceback.format_exc()
+        log(f"=== DIAG: ERROR ===\n{tb}")
+        return jsonify({"status": "error", "mensaje": str(e), "traceback": tb}), 500
 
 
 @app.route("/", methods=["GET"])
