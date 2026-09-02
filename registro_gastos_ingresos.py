@@ -12,11 +12,14 @@ from flask import Flask, request, jsonify
 import gspread
 from google.oauth2.service_account import Credentials
 from datetime import datetime
+from zoneinfo import ZoneInfo
 import os
 import json
 import sys
 
 app = Flask(__name__)
+
+ZONA_HORARIA = ZoneInfo("America/Bogota")  # UTC-5, hora de Colombia
 
 
 def log(msg):
@@ -74,7 +77,7 @@ def registro():
     categoria = data.get("categoria", "")
     monto = data.get("monto", 0)
     descripcion = data.get("descripcion", "")
-    fecha = data.get("fecha") or datetime.now().strftime("%Y-%m-%d %H:%M")
+    fecha = data.get("fecha") or datetime.now(ZONA_HORARIA).strftime("%Y-%m-%d %H:%M")
 
     if not tipo or not medio or not monto:
         return jsonify({"status": "error", "mensaje": "Faltan campos obligatorios (tipo, medio, monto)"}), 400
